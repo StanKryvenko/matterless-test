@@ -7,31 +7,13 @@ public class TextComponent : ViewComponent
         {
             if (_text == value) return;
             _text = value;
-            if (!_isShown)
-                GameManager.Instance.SetTextByComponentId(InstanceId, _text);
+            GameManager.SetTextByComponentId(InstanceId, _text);
         }
     }
     private string _text;
 
-    private bool _isShown;
-
-    public TextComponent(int id, IView view = null) : base(id, view) { }
-
-    public override void Initialize()
+    public TextComponent(int id, IView view = null) : base(id, view)
     {
         Text = "";
-    }
-
-    public override void Show()
-    {
-        if (!_isShown)
-            GameManager.Instance.SetTextByComponentId(InstanceId, _text);
-        
-        _isShown = true;
-    }
-
-    public override void Hide()
-    {
-        _isShown = false;
     }
 }

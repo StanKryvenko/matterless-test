@@ -15,14 +15,14 @@ public class ItemTooltipController : BaseController<ItemTooltipModel>
 
     private void RotateToCamera()
     {
-        var cameraPos = GameManager.Instance.GetCameraPos();
-        cameraPos.Y = GameManager.Instance.GetObjectPosById(Model.InstanceId).Y;
-        GameManager.Instance.LookAt(Model.InstanceId, cameraPos);
+        var cameraPos = GameManager.GetCameraPos();
+        cameraPos.Y = GameManager.GetObjectPosById(Model.InstanceId).Y;
+        GameManager.LookAt(Model.InstanceId, cameraPos);
     }
     
     public void UpdateDistance()
     {
-        var distance = Vector3.Distance(GameManager.Instance.GetCameraPos(), GameManager.Instance.GetObjectPosById(Model.InstanceId));
+        var distance = Vector3.Distance(GameManager.GetCameraPos(), GameManager.GetObjectPosById(Model.InstanceId));
         Model.Distance = distance;
     }
 }

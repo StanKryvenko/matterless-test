@@ -3,7 +3,6 @@ using System;
 public abstract class BaseController<TModel> : IDisposable
     where TModel : BaseModel, new()
 {
-    public event PropertyChangedEventHandler OnModelChanged;
     public TModel Model { get; }
 
     public BaseController()

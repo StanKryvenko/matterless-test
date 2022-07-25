@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
-using UnityEngine.XR.ARSubsystems;
 using Vector3 = System.Numerics.Vector3;
 
 [RequireComponent(typeof(ARRaycastManager))]
@@ -16,12 +15,8 @@ public class GameManager : MonoBehaviour
     private Dictionary<string, GameObject> _prefabsCollectionMap = new();
     
     private Dictionary<int, (IView view, GameObject instance)> _spawnedPrefabsMap = new();
-
-    private GameObject _spawnedObject;
-    private ARRaycastManager _arRaycastManager;
-    private Vector2 _touchPosition;
     
-    private static List<ARRaycastHit> _hits = new();
+    private ARRaycastManager _arRaycastManager;
 
     void Awake()
     {
@@ -39,46 +34,60 @@ public class GameManager : MonoBehaviour
         }
         
         _arRaycastManager = GetComponent<ARRaycastManager>();
+        
+        // Create main game world view
+        CreatePrefab<GamespaceView, GamespaceController, GamespaceModel>("Empty");
     }
+    
+    private void Update() => TickUpdate?.Invoke();
 
 #region Manage Views and Objects
     /// <summary> Create new prefab and dynamically set its unique number </summary>
-    public View<TController, TModel> CreatePrefab<TView, TController, TModel>(string prefabName, int parentId = 0)
+    public static int CreatePrefab<TView, TController, TModel>(string prefabName, int parentId = 0)
         where TModel : BaseModel, new()
         where TController : BaseController<TModel>, new()
         where TView : View<TController, TModel>, new()
     {
-        if (string.IsNullOrEmpty(prefabName)) return null;
+        if (string.IsNullOrEmpty(prefabName)) return 0;
 
         Transform parentTransform = null;
         if (parentId != 0)
         {
-            if (_spawnedPrefabsMap.TryGetValue(parentId, out var parent))
+            if (Instance._spawnedPrefabsMap.TryGetValue(parentId, out var parent))
                 parentTransform = parent.instance.transform;
         }
 
-        var newPrefab = Instantiate(_prefabsCollectionMap[prefabName], parentTransform);
+        var newPrefab = prefabName switch
+        {
+            "Empty"  => new GameObject("Empty"),
+            "Cube"   => GameObject.CreatePrimitive(PrimitiveType.Cube),
+            "Sphere" => GameObject.CreatePrimitive(PrimitiveType.Sphere),
+            _ => Instantiate(Instance._prefabsCollectionMap[prefabName])
+        };
+        newPrefab.transform.SetParent(parentTransform);
+        
         var newView = new TView();
-        
+
+        var id = newPrefab.GetInstanceID();
         // Register newly created prefab and its view
-        _spawnedPrefabsMap.Add(newPrefab.GetInstanceID(), (newView, newPrefab));
+        Instance._spawnedPrefabsMap.Add(id, (newView, newPrefab));
         
-        newView.Initialize(newPrefab.GetInstanceID());
-        return newView;
+        newView.Initialize(id);
+        return id;
     }
     
-    public void SetTextByComponentId(int id, string text)
+    public static void SetTextByComponentId(int id, string text)
     {
-        if (!_spawnedPrefabsMap.TryGetValue(id, out var map)) return;
+        if (!Instance._spawnedPrefabsMap.TryGetValue(id, out var map)) return;
         
         var textComp = map.instance.GetComponentInChildren<TMP_Text>();
         if (textComp != null)
             textComp.text = text;
     }
     
-    public Vector3 GetObjectPosById(int id)
+    public static Vector3 GetObjectPosById(int id)
     {
-        if (!_spawnedPrefabsMap.TryGetValue(id, out var obj)) return Vector3.Zero;
+        if (!Instance._spawnedPrefabsMap.TryGetValue(id, out var obj)) return Vector3.Zero;
 
         var objectPos = obj.instance.transform.position;
         return new Vector3(objectPos.x, objectPos.y, objectPos.z);
@@ -86,57 +95,12 @@ public class GameManager : MonoBehaviour
 #endregion
 
 #region API
-    public void LookAt(int id, Vector3 direction) => Helpers.Physics.LookAt(_spawnedPrefabsMap, id, direction);
-    public Vector3 GetCameraPos()                 => Helpers.Physics.GetCameraPos();
+    public static void SetObjectScaleById(int id, Vector3 scale) => Helpers.Physics.SetObjectScaleById(Instance._spawnedPrefabsMap, id, scale);
+    public static void SetObjectColorById(int id, int r, int g, int b) => Helpers.Physics.SetObjectColorById(Instance._spawnedPrefabsMap, id, new Color(r / 255f, g / 255f, b / 255f));
+    public static void SetObjectPosById(int primitiveId, Vector3 hitPoint) => Helpers.Physics.SetObjectPosById(Instance._spawnedPrefabsMap, primitiveId, hitPoint);
+    public static bool ARRaycast(System.Numerics.Vector2 screenPoint, out Vector3 hitPoint) => Helpers.Physics.ARRaycast(screenPoint, out hitPoint, Instance._arRaycastManager);
+    public static bool TryGetTouchPosition(out System.Numerics.Vector2 touchPosition) => Helpers.Input.TryGetTouchedPosition(out touchPosition);
+    public static void LookAt(int id, Vector3 direction) => Helpers.Physics.LookAt(Instance._spawnedPrefabsMap, id, direction);
+    public static Vector3 GetCameraPos()                 => Helpers.Physics.GetCameraPos();
 #endregion
-
-    private bool TryGetTouchPosition(out Vector2 touchPosition)
-    {
-#if UNITY_EDITOR
-        if (Input.GetMouseButtonDown(0))
-        {
-            var mousePos = Input.mousePosition;
-            touchPosition = new Vector2(mousePos.x, mousePos.y);
-            return true;
-        }
-#else
-        if (Input.touchCount > 0)
-        {
-            touchPosition = Input.GetTouch(0).position;
-            return true;
-        }
-#endif
-        touchPosition = default;
-        return false;
-    }
-
-    private void Update()
-    {
-        TickUpdate?.Invoke();
-        if (!TryGetTouchPosition(out Vector2 touchPosition))
-            return;
-
-#if UNITY_EDITOR
-        // Get raycast hit on plane object
-        if (Physics.Raycast(Camera.main.ScreenPointToRay(touchPosition), out var hit))
-        {
-            var hitPose = new Pose(hit.point, Quaternion.identity);
-#else
-        if (_arRaycastManager.Raycast(touchPosition, _hits, TrackableType.PlaneWithinPolygon))
-        {
-            var hitPose = _hits[0].pose;
-#endif
-            if (_spawnedObject == null)
-            {
-                _spawnedObject = Instantiate(GameObject.CreatePrimitive(PrimitiveType.Cube), hitPose.position, hitPose.rotation);
-                _spawnedPrefabsMap[_spawnedObject.GetInstanceID()] = (null, _spawnedObject);
-                
-                CreatePrefab<PrimitiveObjectView, PrimitiveObjectController, PrimitiveObjectModel>("Empty", _spawnedObject.GetInstanceID());
-            }
-            else
-            {
-                _spawnedObject.transform.position = hitPose.position;
-            }
-        }
-    }
 }

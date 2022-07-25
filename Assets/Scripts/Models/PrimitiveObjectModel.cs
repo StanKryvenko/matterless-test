@@ -1,3 +1,1 @@
-public class PrimitiveObjectModel : BaseModel
-{
-}
+public class PrimitiveObjectModel : BaseModel { }

@@ -1,3 +1,1 @@
-public class PrimitiveObjectController : BaseController<PrimitiveObjectModel>
-{
-}
+public class PrimitiveObjectController : BaseController<PrimitiveObjectModel> { }

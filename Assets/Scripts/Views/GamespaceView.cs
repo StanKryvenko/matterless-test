@@ -1,0 +1,1 @@
+public class GamespaceView : View<GamespaceController, GamespaceModel> { }
